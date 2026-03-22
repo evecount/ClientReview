@@ -1,0 +1,35 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "agency-hero",
+      "description": "Professional agency workspace",
+      "imageUrl": "https://picsum.photos/seed/101/1200/600",
+      "imageHint": "office workspace"
+    },
+    {
+      "id": "project-thumb-1",
+      "description": "Brand Identity Project",
+      "imageUrl": "https://picsum.photos/seed/102/600/400",
+      "imageHint": "graphic design"
+    },
+    {
+      "id": "project-thumb-2",
+      "description": "Commercial Video Shoot",
+      "imageUrl": "https://picsum.photos/seed/103/600/400",
+      "imageHint": "film production"
+    },
+    {
+      "id": "project-thumb-3",
+      "description": "Modern Architecture Reveal",
+      "imageUrl": "https://picsum.photos/seed/105/600/400",
+      "imageHint": "modern building"
+    },
+    {
+      "id": "avatar-agency",
+      "description": "Agency Lead Avatar",
+      "imageUrl": "https://picsum.photos/seed/106/100/100",
+      "imageHint": "professional person"
+    }
+  ]
+}
