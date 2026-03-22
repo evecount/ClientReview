@@ -1,0 +1,172 @@
+/**
+ * ClientReview Security Rules
+ * 
+ * Core Philosophy:
+ * This ruleset implements a multi-tenant, "Shared Access" model designed for a white-label 
+ * client review agency. Security is built on the principle of Authorization Independence, 
+ * where all necessary access control data (membership maps) is denormalized directly 
+ * onto every document. This eliminates the need for expensive cross-document lookups 
+ * (get() calls) and ensures that list operations are naturally filtered by the database 
+ * engine based on the user's identity.
+ *
+ * Data Structure:
+ * - /studios/{studioId}: Top-level agency tenants. Access is controlled by a 'members' map.
+ * - /studios/{studioId}/projects/{projectId}: Projects within a studio. Access is controlled 
+ *   by 'studioMembers' (copied from Studio) and 'clientUserIds' (for authenticated clients).
+ * - /studios/{studioId}/projects/{projectId}/assets/{assetId}: Deliverables. Access matches 
+ *   the parent project via denormalized membership maps.
+ * - /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback_logs/{logId}: 
+ *   Timecoded/coordinate feedback on assets. Access matches the parent asset.
+ *
+ * Key Security Decisions:
+ * - Denormalization for Authorization: Instead of checking parent documents, every document 
+ *   contains the UID maps required to authorize the request. This supports "Query-Applies-Permissions" 
+ *   (QAPs), allowing clients to perform collection group queries or nested queries securely.
+ * - Multi-Role Support: Agency users (admins/editors) and clients have distinct access 
+ *   paths within the same document via 'studioMembers' and 'clientUserIds' fields.
+ * - Relational Integrity: The rules strictly enforce that internal document IDs (e.g., studioId) 
+ *   match the hierarchical Firestore path to prevent data from being orphaned or cross-posted.
+ * - Prototyping Flexibility: While authorization is strictly enforced based on UIDs, 
+ *   the schema (data types and optional fields) is kept flexible to allow for rapid 
+ *   iteration and UI development.
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+
+    /**
+     * @description Basic check to ensure the request is coming from an authenticated user.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the user is a member of the agency/studio.
+     * Uses a map lookup on denormalized data for O(1) authorization.
+     */
+    function isStudioMember(data) {
+      return isSignedIn() && (
+        (data.members != null && data.members[request.auth.uid] != null) ||
+        (data.studioMembers != null && data.studioMembers[request.auth.uid] != null)
+      );
+    }
+
+    /**
+     * @description Checks if the user is an authorized client for a project or asset.
+     */
+    function isClientMember(data) {
+      return isSignedIn() && data.clientUserIds != null && data.clientUserIds[request.auth.uid] == true;
+    }
+
+    /**
+     * @description Combines agency and client access for read operations.
+     */
+    function canAccessDocument(data) {
+      return isStudioMember(data) || isClientMember(data);
+    }
+
+    /**
+     * @description Validates that the user is a member and the document exists.
+     * Used for update and delete operations to ensure state-change safety.
+     */
+    function isExistingStudioMember() {
+      return resource != null && isStudioMember(resource.data);
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for Studio entities.
+     * @path /studios/{studioId}
+     * @allow (create) if the user includes themselves in the members map.
+     * @deny (read) if the user is not in the members map.
+     * @principle Shared Access (Closed Collaborators) via membership map.
+     */
+    match /studios/{studioId} {
+      allow get, list: if isStudioMember(resource.data);
+      
+      allow create: if isSignedIn() 
+                    && request.resource.data.id == studioId 
+                    && request.resource.data.members[request.auth.uid] != null;
+      
+      allow update: if isExistingStudioMember() 
+                    && request.resource.data.id == resource.data.id;
+      
+      allow delete: if isExistingStudioMember();
+
+      /**
+       * @description Rules for Project entities.
+       * @path /studios/{studioId}/projects/{projectId}
+       * @allow (get) if the user is a studio member or an authorized client.
+       * @deny (create) if the user is not a studio member.
+       * @principle Denormalized authorization contexts for agency and client users.
+       */
+      match /projects/{projectId} {
+        allow get, list: if canAccessDocument(resource.data);
+        
+        allow create: if isSignedIn() 
+                      && isStudioMember(request.resource.data)
+                      && request.resource.data.studioId == studioId
+                      && request.resource.data.id == projectId;
+        
+        allow update: if resource != null 
+                      && isStudioMember(resource.data)
+                      && request.resource.data.studioId == resource.data.studioId
+                      && request.resource.data.id == resource.data.id;
+        
+        allow delete: if resource != null && isStudioMember(resource.data);
+
+        /**
+         * @description Rules for Asset entities.
+         * @path /studios/{studioId}/projects/{projectId}/assets/{assetId}
+         * @allow (list) if UID is in studioMembers or clientUserIds.
+         * @deny (update) if requested by a client (agency only).
+         * @principle Path-consistency validation and ownership-based writes.
+         */
+        match /assets/{assetId} {
+          allow get, list: if canAccessDocument(resource.data);
+          
+          allow create: if isSignedIn() 
+                        && isStudioMember(request.resource.data)
+                        && request.resource.data.projectId == projectId
+                        && request.resource.data.studioId == studioId
+                        && request.resource.data.id == assetId;
+          
+          allow update: if resource != null 
+                        && isStudioMember(resource.data)
+                        && request.resource.data.id == resource.data.id
+                        && request.resource.data.projectId == resource.data.projectId;
+          
+          allow delete: if resource != null && isStudioMember(resource.data);
+
+          /**
+           * @description Rules for FeedbackLog entities.
+           * @path /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback_logs/{feedbackLogId}
+           * @allow (create) if the user is an authorized client or studio member.
+           * @deny (delete) if the user is not a studio member.
+           * @principle Shared access for feedback submission with agency-only management.
+           */
+          match /feedback_logs/{feedbackLogId} {
+            allow get, list: if canAccessDocument(resource.data);
+            
+            allow create: if isSignedIn() 
+                          && canAccessDocument(request.resource.data)
+                          && request.resource.data.assetId == assetId
+                          && request.resource.data.projectId == projectId
+                          && request.resource.data.id == feedbackLogId;
+            
+            allow update: if resource != null 
+                          && isStudioMember(resource.data)
+                          && request.resource.data.id == resource.data.id;
+            
+            allow delete: if resource != null && isStudioMember(resource.data);
+          }
+        }
+      }
+    }
+  }
+}
