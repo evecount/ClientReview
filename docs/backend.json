@@ -1,10 +1,58 @@
 {
   "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents an individual user within the ClientReview system, linked to an external authentication service. Stores application-specific user data, not authentication credentials.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserProfile entity, typically matching the user ID from the external authentication system."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's preferred name for display within the application."
+        },
+        "profileImageUrl": {
+          "type": "string",
+          "description": "An optional URL to the user's profile image.",
+          "format": "uri"
+        },
+        "role": {
+          "type": "string",
+          "description": "The primary role of the user within the ClientReview system (e.g., 'AgencyAdmin', 'AgencyMember', 'ClientViewer')."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the user profile was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the user profile was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "role",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
     "Studio": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Studio",
       "type": "object",
-      "description": "Represents a white-label client review studio or agency, acting as the top-level tenant. This entity manages the agency's branding and overall presence within ClientReview.",
+      "description": "Represents an agency, creative company, or construction company, serving as the root tenant for all projects, assets, and feedback.",
       "properties": {
         "id": {
           "type": "string",
@@ -12,61 +60,65 @@
         },
         "name": {
           "type": "string",
-          "description": "The official name of the agency or studio."
+          "description": "The official name of the studio or agency."
         },
-        "brandingPrimaryColor": {
+        "description": {
           "type": "string",
-          "description": "Hexadecimal color code for the primary brand color (e.g., #455CA1)."
+          "description": "A brief description of the studio."
         },
-        "brandingBackgroundColor": {
+        "ownerUserId": {
           "type": "string",
-          "description": "Hexadecimal color code for the background brand color (e.g., #EBEDF9)."
+          "description": "Reference to the UserProfile who is the primary owner or creator of this studio. (Relationship: UserProfile 1:N Studio)"
         },
-        "brandingAccentColor": {
+        "primaryColor": {
           "type": "string",
-          "description": "Hexadecimal color code for the accent brand color (e.g., #73BDF3)."
+          "description": "Hex color code for the studio's primary branding color (e.g., #455CA1)."
         },
-        "brandingHeadlineFont": {
+        "backgroundColor": {
           "type": "string",
-          "description": "The name of the font used for headlines (e.g., 'Space Grotesk')."
+          "description": "Hex color code for the studio's background branding color (e.g., #EBEDF9)."
         },
-        "brandingBodyFont": {
+        "accentColor": {
           "type": "string",
-          "description": "The name of the font used for body text (e.g., 'Inter')."
+          "description": "Hex color code for the studio's accent branding color (e.g., #73BDF3)."
         },
-        "logoUrl": {
+        "headlineFont": {
           "type": "string",
-          "description": "URL to the studio's official logo image.",
-          "format": "uri"
+          "description": "The name of the font chosen for headlines (e.g., 'Space Grotesk')."
+        },
+        "bodyFont": {
+          "type": "string",
+          "description": "The name of the font chosen for body text (e.g., 'Inter')."
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the studio record was created.",
+          "description": "Timestamp when the studio was created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp when the studio record was last updated.",
+          "description": "Timestamp when the studio was last updated.",
           "format": "date-time"
         }
       },
       "required": [
         "id",
         "name",
-        "brandingPrimaryColor",
-        "brandingBackgroundColor",
-        "brandingAccentColor",
-        "brandingHeadlineFont",
-        "brandingBodyFont",
-        "logoUrl",
-        "createdAt"
+        "ownerUserId",
+        "primaryColor",
+        "backgroundColor",
+        "accentColor",
+        "headlineFont",
+        "bodyFont",
+        "createdAt",
+        "updatedAt"
       ]
     },
     "Project": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Project",
       "type": "object",
-      "description": "Represents a specific client project created by a Studio, used to organize deliverables and collect client feedback.",
+      "description": "Represents a specific client project managed by a studio, containing deliverables and feedback.",
       "properties": {
         "id": {
           "type": "string",
@@ -74,27 +126,34 @@
         },
         "studioId": {
           "type": "string",
-          "description": "Reference to the Studio that owns this project. (Relationship: Studio 1:N Project)"
+          "description": "Reference to the Studio this project belongs to. (Relationship: Studio 1:N Project)"
         },
         "name": {
           "type": "string",
-          "description": "The name of the project as displayed to the agency and client."
+          "description": "The name of the project."
         },
         "description": {
           "type": "string",
-          "description": "An optional detailed description of the project."
-        },
-        "clientName": {
-          "type": "string",
-          "description": "The name of the client associated with this project."
-        },
-        "projectAccessKey": {
-          "type": "string",
-          "description": "A secure, unique token or key used to grant clients access to this project's review portal. Backend handles validation securely."
+          "description": "A detailed description of the project goals and scope."
         },
         "status": {
           "type": "string",
-          "description": "The current status of the project (e.g., 'Draft', 'Active', 'Completed', 'Archived')."
+          "description": "The current status of the project (e.g., 'Draft', 'In Review', 'Approved', 'Archived')."
+        },
+        "clientAccessKey": {
+          "type": "string",
+          "description": "A unique, secure key used to generate a gated URL for client access to this project. This is a token, not a password."
+        },
+        "allowedClientUserIds": {
+          "type": "array",
+          "description": "References to UserProfile IDs of clients who are authorized to access this specific project. (Relationship: Project N:N UserProfile)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdByUserId": {
+          "type": "string",
+          "description": "Reference to the UserProfile who created this project. (Relationship: UserProfile 1:N Project)"
         },
         "createdAt": {
           "type": "string",
@@ -105,27 +164,25 @@
           "type": "string",
           "description": "Timestamp when the project was last updated.",
           "format": "date-time"
-        },
-        "clientFeedbackSummary": {
-          "type": "string",
-          "description": "An AI-generated summary of all feedback provided across assets within this project, to help agencies quickly grasp key sentiments."
         }
       },
       "required": [
         "id",
         "studioId",
         "name",
-        "clientName",
-        "projectAccessKey",
         "status",
-        "createdAt"
+        "clientAccessKey",
+        "allowedClientUserIds",
+        "createdByUserId",
+        "createdAt",
+        "updatedAt"
       ]
     },
     "Asset": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Asset",
       "type": "object",
-      "description": "Represents a single deliverable (e.g., image, video) uploaded to a Project for client review and approval.",
+      "description": "Represents a high-resolution deliverable (e.g., image, video) uploaded for review within a project.",
       "properties": {
         "id": {
           "type": "string",
@@ -135,109 +192,114 @@
           "type": "string",
           "description": "Reference to the Project this asset belongs to. (Relationship: Project 1:N Asset)"
         },
-        "studioId": {
+        "fileName": {
           "type": "string",
-          "description": "Reference to the Studio that owns the project this asset belongs to, denormalized for efficient querying. (Relationship: Studio 1:N Project 1:N Asset)"
+          "description": "The original file name of the uploaded asset."
         },
-        "name": {
+        "fileUrl": {
           "type": "string",
-          "description": "The name or title of the asset, often corresponding to its filename."
-        },
-        "fileType": {
-          "type": "string",
-          "description": "The MIME type of the file (e.g., 'image/jpeg', 'video/mp4')."
-        },
-        "downloadUrl": {
-          "type": "string",
-          "description": "A secure, public URL for downloading or streaming the asset from Firebase Cloud Storage.",
+          "description": "Secure download URL for the asset stored in Firebase Cloud Storage.",
           "format": "uri"
         },
         "thumbnailUrl": {
           "type": "string",
-          "description": "URL for a smaller preview or thumbnail image of the asset, useful for galleries.",
+          "description": "Optional URL for a smaller thumbnail image or video preview.",
           "format": "uri"
         },
-        "approvalStatus": {
+        "fileType": {
           "type": "string",
-          "description": "The current approval status of the asset (e.g., 'Pending Review', 'Approved', 'Rejected')."
+          "description": "The type of the asset (e.g., 'image', 'video')."
         },
-        "uploadedAt": {
+        "status": {
           "type": "string",
-          "description": "Timestamp when the asset file was uploaded.",
-          "format": "date-time"
+          "description": "The current approval status of the asset (e.g., 'Pending Review', 'Approved')."
+        },
+        "uploadedByUserId": {
+          "type": "string",
+          "description": "Reference to the UserProfile who uploaded this asset. (Relationship: UserProfile 1:N Asset)"
+        },
+        "approvedByUserId": {
+          "type": "string",
+          "description": "Optional reference to the UserProfile who approved this asset, if applicable. (Relationship: UserProfile 1:N Asset)"
         },
         "approvedAt": {
           "type": "string",
-          "description": "Timestamp when the asset was officially approved by the client, if applicable.",
+          "description": "Timestamp when the asset was approved, if applicable.",
           "format": "date-time"
         },
-        "feedbackSummary": {
+        "createdAt": {
           "type": "string",
-          "description": "An AI-generated summary of specific feedback comments for this individual asset, aiding quick review."
+          "description": "Timestamp when the asset was uploaded.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the asset was last updated (e.g., status change).",
+          "format": "date-time"
         }
       },
       "required": [
         "id",
         "projectId",
-        "studioId",
-        "name",
+        "fileName",
+        "fileUrl",
         "fileType",
-        "downloadUrl",
-        "thumbnailUrl",
-        "approvalStatus",
-        "uploadedAt"
+        "status",
+        "uploadedByUserId",
+        "createdAt",
+        "updatedAt"
       ]
     },
-    "FeedbackLog": {
+    "Feedback": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "FeedbackLog",
+      "title": "Feedback",
       "type": "object",
-      "description": "Represents a single piece of timecoded or coordinate-based feedback provided by a client on a specific Asset.",
+      "description": "Represents a specific time-coded or coordinate-based comment left by a client on an asset.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the FeedbackLog entity."
+          "description": "Unique identifier for the Feedback entity."
         },
         "assetId": {
           "type": "string",
-          "description": "Reference to the Asset this feedback pertains to. (Relationship: Asset 1:N FeedbackLog)"
+          "description": "Reference to the Asset this feedback is related to. (Relationship: Asset 1:N Feedback)"
         },
         "projectId": {
           "type": "string",
-          "description": "Reference to the Project the asset belongs to, denormalized for efficient querying."
+          "description": "Reference to the Project this feedback belongs to, primarily for query efficiency. (Relationship: Project 1:N Feedback)"
         },
-        "studioId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to the Studio the project belongs to, denormalized for efficient querying."
+          "description": "Reference to the UserProfile (client) who left this feedback. (Relationship: UserProfile 1:N Feedback)"
         },
         "comment": {
           "type": "string",
-          "description": "The actual text content of the feedback or comment."
-        },
-        "clientName": {
-          "type": "string",
-          "description": "The name of the client who submitted this feedback."
-        },
-        "clientEmail": {
-          "type": "string",
-          "description": "The email address of the client who submitted this feedback, if available.",
-          "format": "email"
+          "description": "The text content of the feedback comment."
         },
         "timestampSeconds": {
           "type": "number",
-          "description": "For video assets, the exact time (in seconds) within the video where the feedback was given."
+          "description": "Optional: For video assets, the exact timestamp in seconds where the feedback was left."
         },
-        "xCoordinate": {
+        "imageXCoordinate": {
           "type": "number",
-          "description": "For image assets, the X-coordinate (percentage or pixel) on the image where the feedback was targeted."
+          "description": "Optional: For image assets, the X-coordinate (as a percentage, 0-1) where the feedback was left."
         },
-        "yCoordinate": {
+        "imageYCoordinate": {
           "type": "number",
-          "description": "For image assets, the Y-coordinate (percentage or pixel) on the image where the feedback was targeted."
+          "description": "Optional: For image assets, the Y-coordinate (as a percentage, 0-1) where the feedback was left."
+        },
+        "isResolved": {
+          "type": "boolean",
+          "description": "Indicates whether the agency has marked this feedback as addressed or resolved."
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the feedback was submitted.",
+          "description": "Timestamp when the feedback was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the feedback was last updated (e.g., resolved status changed).",
           "format": "date-time"
         }
       },
@@ -245,10 +307,11 @@
         "id",
         "assetId",
         "projectId",
-        "studioId",
+        "userId",
         "comment",
-        "clientName",
-        "createdAt"
+        "isResolved",
+        "createdAt",
+        "updatedAt"
       ]
     }
   },
@@ -261,13 +324,35 @@
   "firestore": {
     "structure": [
       {
+        "path": "/user_profiles/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores application-specific user profiles, separate from authentication credentials. Access is typically self-owned, allowing users to manage their own profile data. Includes a 'role' field for global access distinctions (e.g., super admin).",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user, typically matching the Firebase Authentication UID."
+            }
+          ]
+        }
+      },
+      {
         "path": "/studios/{studioId}",
         "definition": {
           "entityName": "Studio",
           "schema": {
             "$ref": "#/backend/entities/Studio"
           },
-          "description": "Top-level collection for each white-label client review studio or agency. This collection stores core branding and studio metadata. Includes a denormalized 'members' map (e.g., {userId: 'role'}) for authorization of agency personnel within the studio."
+          "description": "Represents a top-level agency or company acting as a tenant. Includes 'ownerUserId' for primary ownership and a 'members' map for collaborative roles within the studio, enabling granular access control for agency users. Also contains branding information for white-labeling.",
+          "params": [
+            {
+              "name": "studioId",
+              "description": "The unique ID of the studio entity."
+            }
+          ]
         }
       },
       {
@@ -277,15 +362,15 @@
           "schema": {
             "$ref": "#/backend/entities/Project"
           },
-          "description": "Subcollection for projects belonging to a specific studio. Each project organizes deliverables and collects client feedback. Includes denormalized 'studioMembers' map (copied from parent Studio for agency access) and 'clientUserIds' map (e.g., {clientUid: true} for authenticated client access) for authorization independence.",
+          "description": "Represents a specific project belonging to a studio. Includes denormalized 'studioOwnerId' and 'studioMembers' map (copied from the parent Studio) for authorization independence. The 'allowedClientUserIds' array specifies client access. Also includes 'createdByUserId'.",
           "params": [
             {
               "name": "studioId",
-              "description": "Unique identifier of the parent Studio."
+              "description": "The unique ID of the parent studio."
             },
             {
               "name": "projectId",
-              "description": "Unique identifier of the Project."
+              "description": "The unique ID of the project."
             }
           ]
         }
@@ -297,20 +382,52 @@
           "schema": {
             "$ref": "#/backend/entities/Asset"
           },
-          "description": "Subcollection for assets (deliverables) within a specific project. Assets are the primary items for client review. Includes denormalized 'studioMembers' and 'clientUserIds' maps (copied from parent Project for authorization independence)."
+          "description": "Represents a high-resolution deliverable (e.g., image, video) within a project. Includes denormalized 'studioId', 'studioOwnerId', 'studioMembers' map, and 'allowedClientUserIds' (copied from the parent Project) for authorization independence. Also includes 'uploadedByUserId'.",
+          "params": [
+            {
+              "name": "studioId",
+              "description": "The unique ID of the grandparent studio."
+            },
+            {
+              "name": "projectId",
+              "description": "The unique ID of the parent project."
+            },
+            {
+              "name": "assetId",
+              "description": "The unique ID of the asset."
+            }
+          ]
         }
       },
       {
-        "path": "/studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback_logs/{feedbackLogId}",
+        "path": "/studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback/{feedbackId}",
         "definition": {
-          "entityName": "FeedbackLog",
+          "entityName": "Feedback",
           "schema": {
-            "$ref": "#/backend/entities/FeedbackLog"
+            "$ref": "#/backend/entities/Feedback"
           },
-          "description": "Subcollection for individual feedback comments provided on a specific asset. Feedback is timecoded or coordinate-based. Includes denormalized 'studioMembers' and 'clientUserIds' maps (copied from parent Asset for authorization independence)."
+          "description": "Represents a time-coded or coordinate-based comment on an asset. Includes denormalized 'studioId', 'studioOwnerId', 'studioMembers' map, and 'allowedClientUserIds' (copied from the grandparent Project via Asset) for authorization independence. Also includes 'userId' for the client who left the feedback.",
+          "params": [
+            {
+              "name": "studioId",
+              "description": "The unique ID of the great-grandparent studio."
+            },
+            {
+              "name": "projectId",
+              "description": "The unique ID of the grandparent project."
+            },
+            {
+              "name": "assetId",
+              "description": "The unique ID of the parent asset."
+            },
+            {
+              "name": "feedbackId",
+              "description": "The unique ID of the feedback comment."
+            }
+          ]
         }
       }
     ],
-    "reasoning": "The Firestore data structure is designed to support a multi-tenant application, ClientReview, ensuring secure, scalable, and debuggable authorization rules by strictly adhering to the core design principles and strategy mandates. The fundamental approach is a hierarchical collection structure with extensive denormalization of authorization contexts.\n\n**Authorization Independence (CRITICAL):**\nThis design achieves authorization independence by denormalizing ownership and membership information into every document that requires it for access control. For instance:\n1.  **Studio Access:** Each `Studio` document will include a `members` map (e.g., `members: { userId1: 'admin', userId2: 'editor' }`). This allows any authenticated agency user to query for studios they are a member of and for security rules to validate their role without needing to perform a `get()` operation on a separate `user_roles` collection or an external service. This directly supports the QAPs for listing studios.\n2.  **Project Access:** `Project` documents, which are subcollections of `Studio`, will denormalize the `members` map from their parent `Studio` into a `studioMembers` map. Additionally, for client access, each `Project` will include a `clientUserIds` map (e.g., `clientUserIds: { clientUid1: true, clientUid2: true }`). This allows both agency users (via `studioMembers`) and authenticated client users (via `clientUserIds`) to access project data without any `get()` calls to parent documents (Studio) or external user role data. The `projectAccessKey` is handled by the backend for initial client authentication/onboarding, but actual Firestore access for clients relies on their `uid` being present in `clientUserIds`.\n3.  **Asset and FeedbackLog Access:** Similarly, `Asset` and `FeedbackLog` documents, nested further down the hierarchy, will denormalize both `studioMembers` and `clientUserIds` maps from their respective parent `Project` (or `Asset` for FeedbackLogs). This ensures that any read or write operation on an Asset or FeedbackLog can be authorized by examining only the `resource.data` of that specific document, eliminating `get()` dependencies.\n\nThis extensive denormalization means that creation of parent and child documents can be atomic, simplifying transactions and batch writes, as rules do not need to check parent documents. It also significantly simplifies security rules, making them declarative and focused solely on the document in question.\n\n**QAPs (Rules are not Filters):**\nBy embedding authorization context directly within each document, this structure directly enables secure `list` operations (Query-Applies-Permissions). For example:\n*   An agency user wanting to see all studios they manage can perform a query like `db.collection('studios').whereField('members.' + request.auth.uid, '!=', null)`. The security rule would be `allow list: if request.auth.uid in resource.data.members;`. This query is efficient and the rule enforces that only relevant documents are returned, without filtering on the client side.\n*   A client user wanting to see their projects can query `db.collection('studios/{studioId}/projects').whereField('clientUserIds.' + request.auth.uid, '==', true)`. The rule `allow list: if request.auth.uid in resource.data.clientUserIds;` ensures only projects they are explicitly granted access to are returned.\n\n**Structural Segregation & Access Modeling:**\nThe design uses hierarchical paths (`/studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback_logs/{feedbackLogId}`) for clear ownership and `1:N` relationships. All documents within a given collection (`/studios/{studioId}/projects`) share a homogeneous security posture (i.e., they are all secured by the same `studioMembers` and `clientUserIds` logic), simplifying rules per collection path. Global roles (like a platform admin) would use a dedicated collection (e.g., `/global_roles/platform_admins/{uid}` to leverage DBAC 'existence over content' for platform-level permissions, though not explicitly required by the current entities).\n\n**Data Clarity and Predictability:**\nStandardized field names like `studioId`, `projectId`, `assetId` ensure clear relationships. Descriptive wildcards (`{studioId}`, `{projectId}`) enhance readability and debuggability of rules."
+    "reasoning": "The recommended Firestore structure for the ClientReview application is designed following a multi-tenant, hierarchical model that prioritizes Authorization Independence, debuggability, and scalable security rules. The root of the tenancy is the 'Studio' collection, with 'Project', 'Asset', and 'Feedback' nested hierarchically within it.\n\n**Authorization Independence via Denormalization:**\nThis is the critical backbone of the design. To eliminate `get()` calls in Firestore Security Rules and enable atomic operations, key authorization context from parent documents is denormalized into their child documents. Specifically:\n\n1.  **Studio Membership:** The `Studio` entity is augmented with a `members` map (`{[uid]: 'role'}`), storing which agency users have what role within that specific studio. The `ownerUserId` is also present.\n2.  **Project Denormalization:** Each `Project` document (residing in `/studios/{studioId}/projects/{projectId}`) explicitly includes:\n    *   `studioOwnerId`: Copied from its parent `Studio`'s `ownerUserId`.\n    *   `studioMembers`: A direct copy of its parent `Studio`'s `members` map.\n    *   `allowedClientUserIds`: An array explicitly listing client UIDs with access to this project.\n3.  **Asset Denormalization:** Each `Asset` document (in `/studios/{studioId}/projects/{projectId}/assets/{assetId}`) includes:\n    *   `studioId`: The ID of the parent studio.\n    *   `studioOwnerId`: Copied from its parent `Project`'s `studioOwnerId`.\n    *   `studioMembers`: Copied from its parent `Project`'s `studioMembers` map.\n    *   `allowedClientUserIds`: Copied from its parent `Project`'s `allowedClientUserIds`.\n4.  **Feedback Denormalization:** Each `Feedback` document (in `/studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback/{feedbackId}`) includes:\n    *   `studioId`, `studioOwnerId`, `studioMembers`, `allowedClientUserIds`: All copied from its parent `Asset`.\n\nThis extensive denormalization means that any access rule for a `Project`, `Asset`, or `Feedback` document can be evaluated solely by inspecting the `request.auth.uid` against the `resource.data` of the document itself, without needing to perform a `get()` on any parent document. This greatly simplifies rule writing, debugging, and prevents issues with transactional atomicity.\n\n**QAPs (Queries are not Filters) Support:**\nThe structural segregation and denormalization strategy directly enable secure and efficient `list` operations:\n\n*   **UserProfile:** `/user_profiles/{userId}` allows self-read/write. Global admin roles (e.g., via a separate `/roles_admin/{uid}` collection) can query all profiles.\n*   **Studio:** A user can query for studios where `request.auth.uid == studio.ownerUserId` or `studio.members[request.auth.uid]` exists. This allows listing only studios the current user is associated with, without rules filtering query results.\n*   **Project, Asset, Feedback:** Given their nested paths, queries can efficiently target specific studios or projects (e.g., `collection('studios/{studioId}/projects').where('studioId', '==', studioId)`). The security rules will then enforce that the `request.auth.uid` is either a `studioOwnerId`, a key in `studioMembers`, or one of the `allowedClientUserIds` within the `resource.data` of the documents being accessed. This ensures that only authorized users can list relevant documents, fulfilling the QAP principle.\n\n**Overall Structure and Access Modeling:**\n\n*   **`/user_profiles/{userId}`:** Private data, owner-based access (`request.auth.uid == userId`).\n*   **`/studios/{studioId}`:** Collaborative data, with `ownerUserId` and a `members` map defining roles for agency users. This acts as the tenant root.\n*   **`/studios/{studioId}/projects/{projectId}`:** Hierarchical path for studio-owned projects. Access for agency users is determined by denormalized `studioOwnerId` or `studioMembers`. Client access is determined by `allowedClientUserIds` array. The `Project` schema includes `createdByUserId` for more granular internal permissions.\n*   **`/studios/{studioId}/projects/{projectId}/assets/{assetId}`:** Continued hierarchy for project deliverables. Access mirrors that of the parent `Project` via denormalized fields. The `Asset` schema includes `uploadedByUserId` for specific asset ownership/management.\n*   **`/studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback/{feedbackId}`:** Deeply nested for specific feedback comments. Access is governed by the inherited denormalized fields. The `Feedback` schema includes `userId` for the client who provided the feedback, enabling self-moderation of comments.\n\nThis design leverages structural segregation, consistent access modeling, and radical denormalization to create a secure, scalable, and highly debuggable Firestore schema for ClientReview."
   }
 }

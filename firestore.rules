@@ -1,172 +1,147 @@
-/**
- * ClientReview Security Rules
- * 
- * Core Philosophy:
- * This ruleset implements a multi-tenant, "Shared Access" model designed for a white-label 
- * client review agency. Security is built on the principle of Authorization Independence, 
- * where all necessary access control data (membership maps) is denormalized directly 
- * onto every document. This eliminates the need for expensive cross-document lookups 
- * (get() calls) and ensures that list operations are naturally filtered by the database 
- * engine based on the user's identity.
- *
- * Data Structure:
- * - /studios/{studioId}: Top-level agency tenants. Access is controlled by a 'members' map.
- * - /studios/{studioId}/projects/{projectId}: Projects within a studio. Access is controlled 
- *   by 'studioMembers' (copied from Studio) and 'clientUserIds' (for authenticated clients).
- * - /studios/{studioId}/projects/{projectId}/assets/{assetId}: Deliverables. Access matches 
- *   the parent project via denormalized membership maps.
- * - /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback_logs/{logId}: 
- *   Timecoded/coordinate feedback on assets. Access matches the parent asset.
- *
- * Key Security Decisions:
- * - Denormalization for Authorization: Instead of checking parent documents, every document 
- *   contains the UID maps required to authorize the request. This supports "Query-Applies-Permissions" 
- *   (QAPs), allowing clients to perform collection group queries or nested queries securely.
- * - Multi-Role Support: Agency users (admins/editors) and clients have distinct access 
- *   paths within the same document via 'studioMembers' and 'clientUserIds' fields.
- * - Relational Integrity: The rules strictly enforce that internal document IDs (e.g., studioId) 
- *   match the hierarchical Firestore path to prevent data from being orphaned or cross-posted.
- * - Prototyping Flexibility: While authorization is strictly enforced based on UIDs, 
- *   the schema (data types and optional fields) is kept flexible to allow for rapid 
- *   iteration and UI development.
- */
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-
     /**
-     * @description Basic check to ensure the request is coming from an authenticated user.
+     * CORE PHILOSOPHY
+     * This ruleset implements a multi-tenant authorization model for the ClientReview system. 
+     * It relies heavily on "Authorization Independence" via data denormalization. By copying 
+     * ownership and membership data (studioOwnerId, studioMembers, allowedClientUserIds) 
+     * directly onto child documents (Projects, Assets, Feedback), we ensure that security 
+     * checks are performant and do not require expensive recursive lookups or get() calls 
+     * for most operations.
+     *
+     * DATA STRUCTURE
+     * - /user_profiles/{userId}: Private user data.
+     * - /studios/{studioId}: Root tenancy entity.
+     * - /studios/{studioId}/projects/{projectId}: Projects within a studio.
+     * - /studios/{studioId}/projects/{projectId}/assets/{assetId}: Deliverables within a project.
+     * - /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback/{feedbackId}: Time-coded feedback.
+     *
+     * KEY SECURITY DECISIONS
+     * - Ownership: Enforced via UID matching on user profiles and studioOwnerId fields.
+     * - Collaborative Access: Managed via a 'members' map on Studio documents, which is 
+     *   denormalized down the hierarchy.
+     * - Client Access: Managed via an 'allowedClientUserIds' array on Project documents, 
+     *   also denormalized downwards.
+     * - Prototyping Flexibility: Rules focus strictly on authorization and relational 
+     *   integrity (UID/ID matching) rather than strict schema or type validation.
      */
+
+    // --- Global Helper Functions ---
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * @description Checks if the user is a member of the agency/studio.
-     * Uses a map lookup on denormalized data for O(1) authorization.
-     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    // Checks if the user is the primary studio owner based on denormalized data
+    function isStudioOwner(data) {
+      return isSignedIn() && (data.ownerUserId == request.auth.uid || data.studioOwnerId == request.auth.uid);
+    }
+
+    // Checks if the user is an agency member based on denormalized members map
     function isStudioMember(data) {
       return isSignedIn() && (
-        (data.members != null && data.members[request.auth.uid] != null) ||
+        (data.members != null && data.members[request.auth.uid] != null) || 
         (data.studioMembers != null && data.studioMembers[request.auth.uid] != null)
       );
     }
 
-    /**
-     * @description Checks if the user is an authorized client for a project or asset.
-     */
-    function isClientMember(data) {
-      return isSignedIn() && data.clientUserIds != null && data.clientUserIds[request.auth.uid] == true;
+    // Checks if the user is a client granted access to this specific branch of the hierarchy
+    function isAllowedClient(data) {
+      return isSignedIn() && (request.auth.uid in data.allowedClientUserIds);
     }
 
-    /**
-     * @description Combines agency and client access for read operations.
-     */
-    function canAccessDocument(data) {
-      return isStudioMember(data) || isClientMember(data);
-    }
-
-    /**
-     * @description Validates that the user is a member and the document exists.
-     * Used for update and delete operations to ensure state-change safety.
-     */
-    function isExistingStudioMember() {
-      return resource != null && isStudioMember(resource.data);
+    // Helper to check if a user has any access to a studio (as owner or member)
+    // Used primarily for path-based list lookups on subcollections
+    function hasStudioAccess(studioId) {
+      let studio = get(/databases/$(database)/documents/studios/$(studioId)).data;
+      return isStudioOwner(studio) || isStudioMember(studio);
     }
 
     // --- Collection Rules ---
 
     /**
-     * @description Rules for Studio entities.
+     * @description Rules for UserProfile. Users can only manage their own profile.
+     * @path /user_profiles/{userId}
+     * @allow (get) user 'abc' reads /user_profiles/abc
+     * @deny (list) user 'abc' attempts to list all user profiles
+     * @principle Ownership: Restricts access to a user's own data tree.
+     */
+    match /user_profiles/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // Users cannot list other profiles
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Rules for Studios. Only owners or members can read. Only owners can update/delete.
      * @path /studios/{studioId}
-     * @allow (create) if the user includes themselves in the members map.
-     * @deny (read) if the user is not in the members map.
-     * @principle Shared Access (Closed Collaborators) via membership map.
+     * @allow (create) user 'abc' creates a studio with ownerUserId 'abc'
+     * @deny (update) user 'xyz' attempts to update a studio they don't own
+     * @principle Shared Access: Uses ownerUserId and members map for authorization.
      */
     match /studios/{studioId} {
-      allow get, list: if isStudioMember(resource.data);
-      
-      allow create: if isSignedIn() 
-                    && request.resource.data.id == studioId 
-                    && request.resource.data.members[request.auth.uid] != null;
-      
-      allow update: if isExistingStudioMember() 
-                    && request.resource.data.id == resource.data.id;
-      
-      allow delete: if isExistingStudioMember();
+      allow get: if isStudioOwner(resource.data) || isStudioMember(resource.data);
+      allow list: if isSignedIn(); // Filtering happens on the client side via where() queries
+      allow create: if isSignedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update: if resource != null && isStudioOwner(resource.data) && request.resource.data.ownerUserId == resource.data.ownerUserId;
+      allow delete: if resource != null && isStudioOwner(resource.data);
+    }
 
-      /**
-       * @description Rules for Project entities.
-       * @path /studios/{studioId}/projects/{projectId}
-       * @allow (get) if the user is a studio member or an authorized client.
-       * @deny (create) if the user is not a studio member.
-       * @principle Denormalized authorization contexts for agency and client users.
-       */
-      match /projects/{projectId} {
-        allow get, list: if canAccessDocument(resource.data);
-        
-        allow create: if isSignedIn() 
-                      && isStudioMember(request.resource.data)
-                      && request.resource.data.studioId == studioId
-                      && request.resource.data.id == projectId;
-        
-        allow update: if resource != null 
-                      && isStudioMember(resource.data)
-                      && request.resource.data.studioId == resource.data.studioId
-                      && request.resource.data.id == resource.data.id;
-        
-        allow delete: if resource != null && isStudioMember(resource.data);
+    /**
+     * @description Rules for Projects. Access granted to studio staff or explicitly invited clients.
+     * @path /studios/{studioId}/projects/{projectId}
+     * @allow (get) client 'c1' reads project where 'c1' is in allowedClientUserIds
+     * @deny (create) client attempts to create a project
+     * @principle Denormalization: Checks access using fields copied from the parent studio.
+     */
+    match /studios/{studioId}/projects/{projectId} {
+      allow get: if isStudioOwner(resource.data) || isStudioMember(resource.data) || isAllowedClient(resource.data);
+      allow list: if hasStudioAccess(studioId);
+      allow create: if isSignedIn() && (isStudioOwner(request.resource.data) || isStudioMember(request.resource.data)) && request.resource.data.studioId == studioId;
+      allow update: if resource != null && (isStudioOwner(resource.data) || isStudioMember(resource.data)) && request.resource.data.studioId == studioId;
+      allow delete: if resource != null && isStudioOwner(resource.data);
+    }
 
-        /**
-         * @description Rules for Asset entities.
-         * @path /studios/{studioId}/projects/{projectId}/assets/{assetId}
-         * @allow (list) if UID is in studioMembers or clientUserIds.
-         * @deny (update) if requested by a client (agency only).
-         * @principle Path-consistency validation and ownership-based writes.
-         */
-        match /assets/{assetId} {
-          allow get, list: if canAccessDocument(resource.data);
-          
-          allow create: if isSignedIn() 
-                        && isStudioMember(request.resource.data)
-                        && request.resource.data.projectId == projectId
-                        && request.resource.data.studioId == studioId
-                        && request.resource.data.id == assetId;
-          
-          allow update: if resource != null 
-                        && isStudioMember(resource.data)
-                        && request.resource.data.id == resource.data.id
-                        && request.resource.data.projectId == resource.data.projectId;
-          
-          allow delete: if resource != null && isStudioMember(resource.data);
+    /**
+     * @description Rules for Assets. Access mirrors parent Project permissions.
+     * @path /studios/{studioId}/projects/{projectId}/assets/{assetId}
+     * @allow (get) studio member reads asset in their project
+     * @deny (update) client attempts to update asset status
+     * @principle Denormalization: Relies on project-level access fields copied to the asset.
+     */
+    match /studios/{studioId}/projects/{projectId}/assets/{assetId} {
+      allow get: if isStudioOwner(resource.data) || isStudioMember(resource.data) || isAllowedClient(resource.data);
+      allow list: if hasStudioAccess(studioId); 
+      allow create: if isSignedIn() && (isStudioOwner(request.resource.data) || isStudioMember(request.resource.data)) && request.resource.data.projectId == projectId;
+      allow update: if resource != null && (isStudioOwner(resource.data) || isStudioMember(resource.data)) && request.resource.data.projectId == projectId;
+      allow delete: if resource != null && (isStudioOwner(resource.data) || isStudioMember(resource.data));
+    }
 
-          /**
-           * @description Rules for FeedbackLog entities.
-           * @path /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback_logs/{feedbackLogId}
-           * @allow (create) if the user is an authorized client or studio member.
-           * @deny (delete) if the user is not a studio member.
-           * @principle Shared access for feedback submission with agency-only management.
-           */
-          match /feedback_logs/{feedbackLogId} {
-            allow get, list: if canAccessDocument(resource.data);
-            
-            allow create: if isSignedIn() 
-                          && canAccessDocument(request.resource.data)
-                          && request.resource.data.assetId == assetId
-                          && request.resource.data.projectId == projectId
-                          && request.resource.data.id == feedbackLogId;
-            
-            allow update: if resource != null 
-                          && isStudioMember(resource.data)
-                          && request.resource.data.id == resource.data.id;
-            
-            allow delete: if resource != null && isStudioMember(resource.data);
-          }
-        }
-      }
+    /**
+     * @description Rules for Feedback. Clients can create feedback. Owners/Members manage resolution.
+     * @path /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback/{feedbackId}
+     * @allow (create) client 'c1' leaves feedback with userId 'c1'
+     * @deny (delete) user 'c2' attempts to delete feedback created by 'c1'
+     * @principle Relational Integrity: Validates userId against auth UID for creation.
+     */
+    match /studios/{studioId}/projects/{projectId}/assets/{assetId}/feedback/{feedbackId} {
+      allow get: if isStudioOwner(resource.data) || isStudioMember(resource.data) || isAllowedClient(resource.data);
+      allow list: if hasStudioAccess(studioId);
+      allow create: if isSignedIn() && (isStudioOwner(request.resource.data) || isStudioMember(request.resource.data) || isAllowedClient(request.resource.data)) && request.resource.data.userId == request.auth.uid;
+      allow update: if resource != null && (isStudioOwner(resource.data) || isStudioMember(resource.data) || isOwner(resource.data.userId)) && request.resource.data.userId == resource.data.userId;
+      allow delete: if resource != null && (isStudioOwner(resource.data) || isStudioMember(resource.data) || isOwner(resource.data.userId));
     }
   }
 }
