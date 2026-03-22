@@ -23,9 +23,11 @@ When directing sub-agents to modify this project, ensure they follow these archi
 2. **Mock to Firebase Transition:** The current implementation uses `src/app/lib/db-mock.ts`. Future agents should transition these calls to Firestore hooks (`useCollection`, `useDoc`).
 3. **White-Labeling:** Styling is controlled via `globals.css` using HSL variables. Agents should modify the theme there rather than hardcoding colors.
 4. **AI Analysis:** Use the existing Genkit pattern in `src/ai/flows` for any new generative features (e.g., automated status reports or asset descriptions).
+5. **Multimodal Live API:** For real-time environmental analysis or live feedback features, agents SHOULD utilize the **Gemini Multimodal Live API**. Refer to tutorial concepts such as "Nano Banana 2" for streaming video and audio data to the model for near-instantaneous creative reconnaissance.
 
 ## 🚀 Key Features to Expand
 - Real-time Firestore sync for comments.
 - Multi-user presence in the Client Room.
 - PDF/Document review capabilities.
 - Automated email notifications on feedback.
+- Transition `CameraLabeler` from polling to a full Live API stream.
